@@ -58,8 +58,13 @@
             <!-- Sidebar -->
             <div class="sidebar">
                 <div class="user-info">
-                    <div class="user-profile">
-                        <i class="fas fa-user-circle"></i>
+                    <div class="user-profile" id="profileButton">
+                        <div class="profile-pic">
+                            <img id="userProfilePic" src="https://ui-avatars.com/api/?background=7c3aed&color=fff" alt="Profile">
+                            <div class="profile-pic-overlay">
+                                <i class="fas fa-camera"></i>
+                            </div>
+                        </div>
                         <span id="userName"></span>
                     </div>
                     <button id="logoutBtn" class="logout-btn">
@@ -108,6 +113,34 @@
                     <div id="emojiPicker" class="emoji-picker hidden">
                         <!-- Emoji picker will be populated by JavaScript -->
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profile Picture Modal -->
+    <div id="profileModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Update Profile Picture</h3>
+                <button class="close-modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="profile-preview">
+                    <img id="profilePreview" src="https://ui-avatars.com/api/?background=7c3aed&color=fff" alt="Preview">
+                </div>
+                <div class="upload-controls">
+                    <label for="profilePicInput" class="upload-btn">
+                        <i class="fas fa-upload"></i>
+                        Choose Image
+                    </label>
+                    <input type="file" id="profilePicInput" accept="image/*" hidden>
+                    <button id="saveProfilePic" class="save-btn" disabled>
+                        <i class="fas fa-save"></i>
+                        Save Changes
+                    </button>
                 </div>
             </div>
         </div>

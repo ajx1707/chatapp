@@ -17,6 +17,13 @@ const messagesContainer = document.getElementById('messagesContainer');
 const messageInput = document.getElementById('messageInput');
 const sendMessage = document.getElementById('sendMessage');
 const emojiButton = document.getElementById('emojiButton');
+const profileButton = document.getElementById('profileButton');
+const profileModal = document.getElementById('profileModal');
+const closeModal = document.querySelector('.close-modal');
+const profilePicInput = document.getElementById('profilePicInput');
+const profilePreview = document.getElementById('profilePreview');
+const saveProfilePic = document.getElementById('saveProfilePic');
+const userProfilePic = document.getElementById('userProfilePic');
 
 // Firebase references
 const auth = firebase.auth();
@@ -26,6 +33,9 @@ const db = firebase.firestore();
 let currentUser = null;
 let currentChat = null;
 let unsubscribeMessages = null;
+
+// Context Menu Elements
+let activeContextMenu = null;
 
 // Auth state observer
 auth.onAuthStateChanged((user) => {
@@ -126,7 +136,7 @@ addChatBtn.addEventListener('click', async () => {
 const picker = new EmojiButton({
     position: 'top-start',
     theme: 'light',
-    autoHide: false,
+    autoHide: true,  // Changed to true to properly hide/show
     emojisPerRow: 8,
     rows: 4,
     showPreview: false,
@@ -146,19 +156,17 @@ picker.on('emoji', emoji => {
     const start = messageInput.value.substring(0, cursorPos);
     const end = messageInput.value.substring(cursorPos);
     messageInput.value = start + emoji + end;
-    const newCursorPos = cursorPos + 2;  // Most emojis are 2 characters long
-    messageInput.selectionStart = newCursorPos;
-    messageInput.selectionEnd = newCursorPos;
     messageInput.focus();
 });
 
-emojiButton.addEventListener('click', () => {
-    picker.togglePicker(emojiButton);
+emojiButton.addEventListener('click', (e) => {
+    e.stopPropagation();  // Prevent event bubbling
+    picker.pickerVisible ? picker.hidePicker() : picker.showPicker(emojiButton);
 });
 
 // Close emoji picker when clicking outside
 document.addEventListener('click', (e) => {
-    if (!emojiButton.contains(e.target) && !picker.pickerEl?.contains(e.target)) {
+    if (picker.pickerVisible && !emojiButton.contains(e.target) && !picker.pickerEl?.contains(e.target)) {
         picker.hidePicker();
     }
 });
@@ -190,12 +198,210 @@ async function sendNewMessage() {
     }
 }
 
+// Create context menu function
+function createContextMenu(items, x, y) {
+    // Remove any existing context menu
+    if (activeContextMenu) {
+        activeContextMenu.remove();
+    }
+
+    const menu = document.createElement('div');
+    menu.className = 'context-menu';
+    
+    items.forEach(item => {
+        const menuItem = document.createElement('div');
+        menuItem.className = `context-menu-item ${item.class || ''}`;
+        menuItem.innerHTML = `<i class="${item.icon}"></i>${item.text}`;
+        menuItem.addEventListener('click', (e) => {
+            e.stopPropagation();
+            item.onClick();
+            menu.remove();
+            activeContextMenu = null;
+        });
+        menu.appendChild(menuItem);
+    });
+
+    document.body.appendChild(menu);
+    
+    // Position the menu after it's added to get proper dimensions
+    const menuRect = menu.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    // Check if menu would go off the right side
+    if (x + menuRect.width > viewportWidth) {
+        x = viewportWidth - menuRect.width - 10;
+    }
+
+    // Check if menu would go off the bottom
+    if (y + menuRect.height > viewportHeight) {
+        y = viewportHeight - menuRect.height - 10;
+    }
+
+    // Ensure menu doesn't go off the left or top
+    x = Math.max(10, x);
+    y = Math.max(10, y);
+
+    menu.style.left = `${x}px`;
+    menu.style.top = `${y}px`;
+
+    activeContextMenu = menu;
+
+    // Add click outside listener
+    setTimeout(() => {
+        document.addEventListener('click', function closeMenu(e) {
+            if (!menu.contains(e.target)) {
+                menu.remove();
+                activeContextMenu = null;
+                document.removeEventListener('click', closeMenu);
+            }
+        });
+    }, 0);
+}
+
+// Function to add message to container with context menu
 function addMessageToContainer(message, senderId) {
     const messageElement = document.createElement('div');
     messageElement.classList.add('message', senderId === currentUser.uid ? 'sent' : 'received');
     messageElement.textContent = message.text;
+    messageElement.dataset.messageId = message.id;
+
+    // Add context menu for messages
+    messageElement.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        // Only allow deletion of own messages
+        if (senderId === currentUser.uid) {
+            const rect = messageElement.getBoundingClientRect();
+            let x = e.clientX;
+            let y = e.clientY;
+
+            // If on mobile, center the menu
+            if (window.innerWidth <= 768) {
+                x = window.innerWidth / 2;
+                y = window.innerHeight / 2;
+            }
+
+            createContextMenu([
+                {
+                    text: 'Delete Message',
+                    icon: 'fas fa-trash',
+                    class: 'delete',
+                    onClick: async () => {
+                        try {
+                            await db.collection('chats').doc(currentChat)
+                                .collection('messages').doc(message.id).delete();
+                            messageElement.remove();
+                        } catch (error) {
+                            alert('Error deleting message: ' + error.message);
+                        }
+                    }
+                }
+            ], x, y);
+        }
+    });
+
     messagesContainer.appendChild(messageElement);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+// Add context menu for chat list items
+function createChatListItem(chatId, otherUserName) {
+    const chatItem = document.createElement('div');
+    chatItem.className = 'chat-list-item';
+    chatItem.innerHTML = `
+        <i class="fas fa-user-circle"></i>
+        <span>${otherUserName}</span>
+    `;
+    
+    chatItem.addEventListener('click', () => selectChat(chatId, otherUserName));
+    
+    // Add context menu
+    chatItem.addEventListener('contextmenu', async (e) => {
+        e.preventDefault();
+        createContextMenu([
+            {
+                text: 'Delete Conversation',
+                icon: 'fas fa-trash',
+                class: 'delete',
+                onClick: async () => {
+                    if (confirm('Are you sure you want to delete this conversation?')) {
+                        try {
+                            // Delete all messages
+                            const messagesRef = db.collection('chats').doc(chatId).collection('messages');
+                            const messages = await messagesRef.get();
+                            const batch = db.batch();
+                            messages.docs.forEach((doc) => {
+                                batch.delete(doc.ref);
+                            });
+                            await batch.commit();
+                            
+                            // Delete chat document
+                            await db.collection('chats').doc(chatId).delete();
+                            
+                            // Remove from UI
+                            chatItem.remove();
+                            if (currentChat === chatId) {
+                                currentChat = null;
+                                noChatSelected.classList.remove('hidden');
+                                activeChatArea.classList.add('hidden');
+                            }
+                        } catch (error) {
+                            alert('Error deleting conversation: ' + error.message);
+                        }
+                    }
+                }
+            }
+        ], e.pageX, e.pageY);
+    });
+    
+    return chatItem;
+}
+
+// Update the loadUserChats function to use the new createChatListItem
+async function loadUserChats() {
+    chatList.innerHTML = '';
+    const chatsQuery = await db.collection('chats')
+        .where('users', 'array-contains', currentUser.uid)
+        .get();
+
+    for (const chatDoc of chatsQuery.docs) {
+        const chatData = chatDoc.data();
+        const otherUserId = chatData.users.find(id => id !== currentUser.uid);
+        const otherUserDoc = await db.collection('users').doc(otherUserId).get();
+        const otherUserName = otherUserDoc.data().name;
+        
+        const chatItem = createChatListItem(chatDoc.id, otherUserName);
+        chatList.appendChild(chatItem);
+    }
+}
+
+// Update the selectChat function to include message IDs
+async function selectChat(chatId, otherUserName) {
+    if (unsubscribeMessages) {
+        unsubscribeMessages();
+    }
+
+    currentChat = chatId;
+    currentChatUser.textContent = otherUserName;
+    messagesContainer.innerHTML = '';
+    noChatSelected.classList.add('hidden');
+    activeChatArea.classList.remove('hidden');
+
+    // Load and listen to messages
+    unsubscribeMessages = db.collection('chats').doc(chatId)
+        .collection('messages')
+        .orderBy('timestamp')
+        .onSnapshot((snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+                if (change.type === 'added') {
+                    const message = {
+                        ...change.doc.data(),
+                        id: change.doc.id  // Include the message ID
+                    };
+                    addMessageToContainer(message, message.senderId);
+                }
+            });
+        });
 }
 
 // Helper functions
@@ -214,63 +420,83 @@ async function loadUserInfo() {
     const userDoc = await db.collection('users').doc(currentUser.uid).get();
     const userData = userDoc.data();
     userNameElement.textContent = userData.name;
+    
+    // Set profile picture if exists
+    if (userData.profilePicture) {
+        userProfilePic.src = userData.profilePicture;
+        profilePreview.src = userData.profilePicture;
+    } else {
+        // Set default avatar with user's initials
+        const initials = userData.name.split(' ').map(n => n[0]).join('').toUpperCase();
+        const defaultAvatar = `https://ui-avatars.com/api/?name=${initials}&background=7c3aed&color=fff`;
+        userProfilePic.src = defaultAvatar;
+        profilePreview.src = defaultAvatar;
+    }
 }
 
 function getChatId(uid1, uid2) {
     return [uid1, uid2].sort().join('_');
 }
 
-async function loadUserChats() {
-    const unsubscribe = db.collection('chats')
-        .where('users', 'array-contains', currentUser.uid)
-        .onSnapshot(async (snapshot) => {
-            chatList.innerHTML = '';
-            
-            for (const change of snapshot.docChanges()) {
-                if (change.type === 'added' || change.type === 'modified') {
-                    const chat = change.doc;
-                    const otherUserId = chat.data().users.find(id => id !== currentUser.uid);
-                    const otherUserDoc = await db.collection('users').doc(otherUserId).get();
-                    const otherUserData = otherUserDoc.data();
+// Profile Picture Handlers
+profileButton.addEventListener('click', () => {
+    profileModal.classList.remove('hidden');
+});
 
-                    const chatElement = document.createElement('div');
-                    chatElement.className = 'chat-item';
-                    chatElement.innerHTML = `
-                        <i class="fas fa-user-circle"></i>
-                        <span>${otherUserData.name}</span>
-                    `;
-                    chatElement.addEventListener('click', () => {
-                        document.querySelectorAll('.chat-item').forEach(item => item.classList.remove('active'));
-                        chatElement.classList.add('active');
-                        selectChat(chat.id, otherUserData.name);
-                    });
-                    chatList.appendChild(chatElement);
-                }
-            }
-        });
-}
+closeModal.addEventListener('click', () => {
+    profileModal.classList.add('hidden');
+    // Reset preview
+    const currentPic = userProfilePic.src;
+    profilePreview.src = currentPic;
+    profilePicInput.value = '';
+    saveProfilePic.disabled = true;
+});
 
-function selectChat(chatId, otherUserName) {
-    if (unsubscribeMessages) {
-        unsubscribeMessages();
+profilePicInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit
+            alert('Image size should be less than 5MB');
+            profilePicInput.value = '';
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            profilePreview.src = e.target.result;
+            saveProfilePic.disabled = false;
+        };
+        reader.readAsDataURL(file);
     }
+});
 
-    currentChat = chatId;
-    currentChatUser.textContent = otherUserName;
-    noChatSelected.classList.add('hidden');
-    activeChatArea.classList.remove('hidden');
-    messagesContainer.innerHTML = '';
-
-    // Load and listen to messages
-    unsubscribeMessages = db.collection('chats').doc(chatId)
-        .collection('messages')
-        .orderBy('timestamp')
-        .onSnapshot((snapshot) => {
-            snapshot.docChanges().forEach((change) => {
-                if (change.type === 'added') {
-                    const message = change.doc.data();
-                    addMessageToContainer(message, message.senderId);
-                }
-            });
+saveProfilePic.addEventListener('click', async () => {
+    try {
+        const imageData = profilePreview.src;
+        
+        // Update user profile in Firestore
+        await db.collection('users').doc(currentUser.uid).update({
+            profilePicture: imageData
         });
-}
+
+        // Update UI
+        userProfilePic.src = imageData;
+        profileModal.classList.add('hidden');
+        saveProfilePic.disabled = true;
+        profilePicInput.value = '';
+    } catch (error) {
+        alert('Error updating profile picture: ' + error.message);
+    }
+});
+
+// Close modal when clicking outside
+profileModal.addEventListener('click', (e) => {
+    if (e.target === profileModal) {
+        profileModal.classList.add('hidden');
+        // Reset preview
+        const currentPic = userProfilePic.src;
+        profilePreview.src = currentPic;
+        profilePicInput.value = '';
+        saveProfilePic.disabled = true;
+    }
+});
