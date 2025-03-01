@@ -141,13 +141,14 @@ const picker = new EmojiButton({
     }
 });
 
-picker.on('emoji', selection => {
+picker.on('emoji', emoji => {
     const cursorPos = messageInput.selectionStart;
-    const textBeforeCursor = messageInput.value.substring(0, cursorPos);
-    const textAfterCursor = messageInput.value.substring(cursorPos);
-    messageInput.value = textBeforeCursor + selection.emoji + textAfterCursor;
-    messageInput.selectionStart = cursorPos + selection.emoji.length;
-    messageInput.selectionEnd = cursorPos + selection.emoji.length;
+    const start = messageInput.value.substring(0, cursorPos);
+    const end = messageInput.value.substring(cursorPos);
+    messageInput.value = start + emoji + end;
+    const newCursorPos = cursorPos + 2;  // Most emojis are 2 characters long
+    messageInput.selectionStart = newCursorPos;
+    messageInput.selectionEnd = newCursorPos;
     messageInput.focus();
 });
 
@@ -183,9 +184,18 @@ async function sendNewMessage() {
             timestamp: firebase.firestore.FieldValue.serverTimestamp()
         });
         messageInput.value = '';
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
     } catch (error) {
         alert(error.message);
     }
+}
+
+function addMessageToContainer(message, senderId) {
+    const messageElement = document.createElement('div');
+    messageElement.classList.add('message', senderId === currentUser.uid ? 'sent' : 'received');
+    messageElement.textContent = message.text;
+    messagesContainer.appendChild(messageElement);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
 // Helper functions
@@ -259,13 +269,7 @@ function selectChat(chatId, otherUserName) {
             snapshot.docChanges().forEach((change) => {
                 if (change.type === 'added') {
                     const message = change.doc.data();
-                    const messageElement = document.createElement('div');
-                    messageElement.className = `message ${message.senderId === currentUser.uid ? 'sent' : 'received'}`;
-                    messageElement.textContent = message.text;
-                    messagesContainer.appendChild(messageElement);
-                    
-                    // Scroll to the latest message with smooth animation
-                    messageElement.scrollIntoView({ behavior: 'smooth' });
+                    addMessageToContainer(message, message.senderId);
                 }
             });
         });
