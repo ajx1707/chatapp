@@ -24,6 +24,8 @@ const profilePicInput = document.getElementById('profilePicInput');
 const profilePreview = document.getElementById('profilePreview');
 const saveProfilePic = document.getElementById('saveProfilePic');
 const userProfilePic = document.getElementById('userProfilePic');
+const backToChats = document.getElementById('backToChats');
+const chatContainer = document.querySelector('.chat-container');
 
 // Firebase references
 const auth = firebase.auth();
@@ -375,17 +377,27 @@ async function loadUserChats() {
     }
 }
 
+// Mobile navigation
+function showChatArea() {
+    chatContainer.classList.add('chat-selected');
+}
+
+backToChats.addEventListener('click', () => {
+    chatContainer.classList.remove('chat-selected');
+});
+
 // Update the selectChat function to include message IDs
-async function selectChat(chatId, otherUserName) {
+async function selectChat(chatId, otherUserId) {
     if (unsubscribeMessages) {
         unsubscribeMessages();
     }
 
     currentChat = chatId;
-    currentChatUser.textContent = otherUserName;
+    currentChatUser.textContent = otherUserId;
     messagesContainer.innerHTML = '';
     noChatSelected.classList.add('hidden');
     activeChatArea.classList.remove('hidden');
+    showChatArea();
 
     // Load and listen to messages
     unsubscribeMessages = db.collection('chats').doc(chatId)
