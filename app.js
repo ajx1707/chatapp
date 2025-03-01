@@ -16,6 +16,7 @@ const currentChatUser = document.getElementById('currentChatUser');
 const messagesContainer = document.getElementById('messagesContainer');
 const messageInput = document.getElementById('messageInput');
 const sendMessage = document.getElementById('sendMessage');
+const emojiButton = document.getElementById('emojiButton');
 
 // Firebase references
 const auth = firebase.auth();
@@ -121,11 +122,50 @@ addChatBtn.addEventListener('click', async () => {
     }
 });
 
+// Initialize emoji picker
+const picker = new EmojiButton({
+    position: 'top-start',
+    theme: 'light',
+    autoHide: false,
+    emojisPerRow: 8,
+    rows: 4,
+    showPreview: false,
+    showSearch: true,
+    showRecents: true,
+    styleProperties: {
+        '--emoji-size': '1.5rem',
+        '--emoji-padding': '0.5rem',
+        '--background-color': '#ffffff',
+        '--hover-color': '#f1f5f9'
+    }
+});
+
+picker.on('emoji', selection => {
+    messageInput.value += selection.emoji;
+    messageInput.focus();
+});
+
+emojiButton.addEventListener('click', () => {
+    picker.togglePicker(emojiButton);
+});
+
+// Close emoji picker when clicking outside
+document.addEventListener('click', (e) => {
+    if (!emojiButton.contains(e.target) && !picker.pickerEl?.contains(e.target)) {
+        picker.hidePicker();
+    }
+});
+
+// Handle message input with emoji support
+messageInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendNewMessage();
+    }
+});
+
 // Send message handler
 sendMessage.addEventListener('click', sendNewMessage);
-messageInput.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') sendNewMessage();
-});
 
 async function sendNewMessage() {
     if (!currentChat || !messageInput.value.trim()) return;

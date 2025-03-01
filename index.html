@@ -97,16 +97,24 @@
                         <!-- Messages will be added here -->
                     </div>
                     <div class="message-input">
+                        <button id="emojiButton" class="emoji-button">
+                            <i class="far fa-smile"></i>
+                        </button>
                         <input type="text" id="messageInput" placeholder="Type your message...">
                         <button id="sendMessage">
                             <i class="fas fa-paper-plane"></i>
                         </button>
+                    </div>
+                    <div id="emojiPicker" class="emoji-picker hidden">
+                        <!-- Emoji picker will be populated by JavaScript -->
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Emoji Picker Library -->
+    <script src="https://cdn.jsdelivr.net/npm/@joeattardi/emoji-button@3.1.1/dist/index.min.js"></script>
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
