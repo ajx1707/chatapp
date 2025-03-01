@@ -132,6 +132,7 @@ const picker = new EmojiButton({
     showPreview: false,
     showSearch: true,
     showRecents: true,
+    rootElement: document.getElementById('chatInterface'),
     styleProperties: {
         '--emoji-size': '1.5rem',
         '--emoji-padding': '0.5rem',
@@ -141,7 +142,12 @@ const picker = new EmojiButton({
 });
 
 picker.on('emoji', selection => {
-    messageInput.value += selection.emoji;
+    const cursorPos = messageInput.selectionStart;
+    const textBeforeCursor = messageInput.value.substring(0, cursorPos);
+    const textAfterCursor = messageInput.value.substring(cursorPos);
+    messageInput.value = textBeforeCursor + selection.emoji + textAfterCursor;
+    messageInput.selectionStart = cursorPos + selection.emoji.length;
+    messageInput.selectionEnd = cursorPos + selection.emoji.length;
     messageInput.focus();
 });
 
